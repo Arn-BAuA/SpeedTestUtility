@@ -1,4 +1,5 @@
-# Speed Test Utility
+
+![](SpeedTestUtility.png)
 
 Some classes I need all the time for speedtesting my code.
 
