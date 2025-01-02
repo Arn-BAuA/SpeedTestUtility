@@ -77,11 +77,51 @@ python testExperiment/experiment.py 1 1200112343 1
 </code></pre>
 
 it produces a file testExperiment/outputFile.csv or appends to this file, if present.<br>
-This file is now accompanied by a .json file:
+This file is now accompanied by a .json file (testSeries.json):
 
 <pre><code>
-
+{
+	"Command":"python testExperiment/experiment.py",
+	"RequiresSeed":true,
+	"SeedArgumentPosition":2,
+	"Variations":[
+		[1,1.5,2.5],
+		[1,2]
+	],
+	"ErrorLog":"testExperiments/Errors.log"
+}
 </code></pre>
 
+THis file specifies which parameter should be varried. If we now call:
+
+<pre><code>
+python ExperimentScheduler.py -f testExperiment/testSeries.json -s testExperiment/seedList.txt 
+</code></pre>
+
+The code produces the follwoing output:
+
+<pre><code>
+python testExperiment/experiment.py 1 12345678 1
+python testExperiment/experiment.py 1.5 12345678 1
+python testExperiment/experiment.py 2.5 12345678 1
+python testExperiment/experiment.py 1 12345678 2
+python testExperiment/experiment.py 1.5 12345678 2
+python testExperiment/experiment.py 2.5 12345678 2
+python testExperiment/experiment.py 1 12345679 1
+python testExperiment/experiment.py 1.5 12345679 1
+python testExperiment/experiment.py 1 12345679 2
+python testExperiment/experiment.py 1 12345680 1
+python testExperiment/experiment.py 2.5 12345679 1
+python testExperiment/experiment.py 1.5 12345679 2
+python testExperiment/experiment.py 1.5 12345680 1
+python testExperiment/experiment.py 1 12345680 2
+python testExperiment/experiment.py 2.5 12345679 2
+python testExperiment/experiment.py 2.5 12345680 1
+python testExperiment/experiment.py 1.5 12345680 2
+python testExperiment/experiment.py 2.5 12345680 2
+All Done Here.
+</code></pre>
+
+All the specified parametercombinations are executed. Notice how the code starts to adopt in the later executions. Experiments that take longer to run will be executed less often. This way, information is gathered first there where it is easyest to be obtained.
 
 ### Example Setup with Cron:

@@ -1,19 +1,76 @@
 
 
 import sys
+import argparse
 import os
 import time
 import json
 import copy
 import subprocess
 
+#Parsing command line Arguments:
+parser = argparse.ArgumentParser()
+
+parser.add_argument("-f",
+                    "--SpecificationFile",
+                    dest="SeriesSpecFile",
+                    help="Json File specifying how one measurement series should look like.",
+                    type=str,
+                    required=True)
+parser.add_argument("-s",
+                    "--SeedList",
+                    "--Seeds",
+                    dest="SeedList",
+                    help="A list of seeds, fo r experiments that use seeded random.",
+                    type=str)
+parser.add_argument("-m",
+                    "--mute",
+                    "--NoOutput",
+                    dest="mute",
+                    help="If true, this scirpt doesnt produce output",
+                    type = bool,
+                    default = False)
+parser.add_argument("-t",
+                    "--RunUntil",
+                    dest="runUntil",
+                    help="Requires a time in military time in the format hh:mm or a date in yyyy-MM-dd,hh:mm. If set, the code tries to schedule experiments in a way that they finish round about the time that is specified. Estimation is based on already conducted experiments. This is for the use in conjunction with cron.",
+                    type=str)
+parser.add_argument("-tt",
+                    "--time-table",
+                    dest="TimeTable",
+                    help="Requires a json like time table. If specified, the next time the script should terminate will be read from the timetable.",
+                    type=str)
+parser.add_argument("-i",
+                    "--instanceHandling",
+                    dest="InstanceHandling",
+                    help="either 'wait','startAnyway','dontStart'. If a nother instance of the process is running, this instance does the specified. it will either wait for the other instance to finish and than start, start anyway in paralell or will not start (the call will be ignored)",
+                    default="wait",
+                    type=str)
+
+args = vars(parser.parse_args())
+
 # Json File specifying the command to run to start an experiment and the arguments involved
-seriesSpecificationFile = sys.argv[1]
+seriesSpecificationFile = args["SeriesSpecFile"]
 memFile = seriesSpecificationFile+".mem"
+
+with open(seriesSpecificationFile,'r') as file:
+    seriesSpecification = json.load(file)
 
 
 # List of seeds for random Seeding of the Experiment.
-seedList = sys.argv[2]
+if seriesSpecification["RequiresSeed"]:
+    if not "SeedList" in args:
+        raise Exception("A seedlist is required to run "+args["SeriesSpecFile"]+".")
+
+    seedList = args["SeedList"]
+
+    seeds = []
+
+    with open(seedList,'r') as file:
+        for line in file:
+            seeds.append(int(line))
+
+muteOutput = args["mute"]
 
 #Keys used to remember Run.
 def createExperimentKey(parameterIndices):
@@ -47,14 +104,6 @@ def getAllParameterVariations(possibleParameters):
 
     return parameterIndices
 
-
-with open(seriesSpecificationFile,'r') as file:
-    seriesSpecification = json.load(file)
-
-seeds = []
-with open(seedList,'r') as file:
-    for line in file:
-        seeds.append(int(line))
 
 memory = {}
 
@@ -128,7 +177,8 @@ while not allDone:
     #running the experiment
     experimentStartTime = time.time()
     
-    print(runCommand)
+    if not muteOutput:
+        print(runCommand)
 
     subprocess.call(runCommand,shell=True)
 
