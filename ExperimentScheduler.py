@@ -16,7 +16,7 @@ memFile = seriesSpecificationFile+".mem"
 seedList = sys.argv[2]
 
 #Keys used to remember Run.
-def creatExperimentKey(parameterIndices):
+def createExperimentKey(parameterIndices):
     key = ""
     for i,index in enumerate(parameterIndices):
         key += "p"+str(i)+":"+str(index)+";"
@@ -39,7 +39,7 @@ def getAllParameterVariations(possibleParameters):
             for i in range(0,nVariations):
                 parameterIndices.append([i%n])
         else:
-            for i in range(0,nVariations/changeRate):
+            for i in range(0,int(nVariations/changeRate)):
                 for j in range(0,changeRate):
                     parameterIndices[i*changeRate+j].append(int(i%n))
         
@@ -83,42 +83,62 @@ if updateOccured:
         json.dump(memory,file)
 
 
-#Determine next experiment to be ran:
+allDone = False
 
-ranTheLeast = memory.keys()[0]
-cumTime = memory[ranTheLeast]["CumWallTime"]
+while not allDone:
+    #Check if we are done
+    for key in memory:
+        allDone = True;
+        if not memory[key]["#ExperimentsRun"] == len(seeds):
+            allDone = False
+            break
+    
+    if allDone:
+        print("All Done Here.")
+        break
 
-for key in memory:
-    if memory[key]["CumWallTime"] < cumTime:
-        ranTheLeast = key
-        cumTime = memory[key]["CumWallTime"]
+    #Determine next experiment to be ran:
+    
+    ranTheLeast = ""
+    cumTime = 1e10
 
-#Creating Call command for the Experiment
+    for key in memory:
+        if memory[key]["CumWallTime"] < cumTime:
+            if not memory[key]["#ExperimentsRun"] == len(seeds):
+                ranTheLeast = key
+                cumTime = memory[key]["CumWallTime"]
 
-runCommand = seriesSpecification["Command"]
-commandArgs = []
-for i,index in enumerate(memory[ranTheLast]["ParameterIndices"]):
-    commandArgs.append(str(seriesSpecification["Variations"][i][index]))
 
-if "RequiresSeed" in seriesSpecification and seriesSpecification["RequiresSeed"] == True:
-    seed = seeds[memory[ranTheLast]["#ExperimentsRun"]]
-    commandArgs.insert(seriesSpecification["SeedArgumentPosition"],str(seed))
+    toRun = ranTheLeast
 
-for arg in commandArgs:
-    runCommand += " "+arg
+    #Creating Call command for the Experiment
 
-#running the experiment
-experimentStartTime = time.time()
+    runCommand = seriesSpecification["Command"]
+    commandArgs = []
+    for i,index in enumerate(memory[toRun]["ParameterIndices"]):
+        commandArgs.append(str(seriesSpecification["Variations"][i][index]))
 
-subprocess.call(runCommand)
+    if "RequiresSeed" in seriesSpecification and seriesSpecification["RequiresSeed"] == True:
+        seed = seeds[memory[toRun]["#ExperimentsRun"]]
+        commandArgs.insert(seriesSpecification["SeedArgumentPosition"]-1,str(seed))
 
-experimentEndTime = time.time()
+    for arg in commandArgs:
+        runCommand += " "+arg
 
-wallTime = experimentEndTime-experimentStartTime
+    #running the experiment
+    experimentStartTime = time.time()
+    
+    print(runCommand)
 
-#updating the memory
-memory[ranTheLast]["CumWallTime"] += wallTime
-memory[ranTheLast]["#ExperimentsRun"] += 1
+    subprocess.call(runCommand,shell=True)
 
-with open(memFile,'w') as file:
-    json.dump(memory,file)
+    experimentEndTime = time.time()
+
+    wallTime = experimentEndTime-experimentStartTime
+
+    #updating the memory
+    memory[toRun]["CumWallTime"] += wallTime
+    memory[toRun]["#ExperimentsRun"] += 1
+
+    with open(memFile,'w') as file:
+        json.dump(memory,file)
