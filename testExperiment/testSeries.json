@@ -3,8 +3,8 @@
 	"RequiresSeed":true,
 	"SeedArgumentPosition":2,
 	"Variations":[
-		[1,1.5,2.5],
-		[1,2]
+		[1,1.5,2.5,10],
+		[1,2,3]
 	],
 	"ErrorLog":"testExperiments/Errors.log"
 }

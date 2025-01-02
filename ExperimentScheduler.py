@@ -1,12 +1,13 @@
 
 
-import sys
+import numpy
 import argparse
 import os
 import time
 import json
 import copy
 import subprocess
+import datetime
 
 #Parsing command line Arguments:
 parser = argparse.ArgumentParser()
@@ -72,6 +73,38 @@ if seriesSpecification["RequiresSeed"]:
 
 muteOutput = args["mute"]
 
+stopTimeSet = False
+stopTime = None
+
+if not args["runUntil"] == None:
+    stopTimeSet = True
+
+    timeAsStr = args["runUntil"]
+
+    parseError= False
+    
+    if len(timeAsStr) <= 5:
+        #it is hh:mm
+        t = datetime.time.fromisoformat(timeAsStr)
+
+        currentDateTime = datetime.datetime.now()
+        currentTime = currentDateTime.time()
+        currentDate = currentDateTime.date()
+
+        if currentTime > t:
+            #Date is next day.
+            delta = datetime.timedelta(days=1)
+            stopTime = datetime.datetime.combine(currentDate+delta,t)
+        else:
+            #Date is this day
+            stopTime = datetime.datetime.combine(currentDate,t)
+
+if not args["TimeTable"] == None:
+    print("Time table not supported at the moment.")
+
+if stopTimeSet:
+    print("Stop Time is set to "+str(stopTime))
+
 #Keys used to remember Run.
 def createExperimentKey(parameterIndices):
     key = ""
@@ -123,6 +156,9 @@ for v in variations:
         memory[key] = {
                     "ParameterIndices":v,
                     "CumWallTime":0,
+                    "WallTimes":[],
+                    "AvgWallTime":0,
+                    "WallTimeStdev":0,
                     "#ExperimentsRun":0,
                 }
         updateOccured = True
@@ -143,13 +179,14 @@ while not allDone:
             break
     
     if allDone:
-        print("All Done Here.")
+        if not muteOutput:
+            print("All Done Here.")
         break
 
     #Determine next experiment to be ran:
     
     ranTheLeast = ""
-    cumTime = 1e10
+    cumTime = float("inf")
 
     for key in memory:
         if memory[key]["CumWallTime"] < cumTime:
@@ -159,6 +196,34 @@ while not allDone:
 
 
     toRun = ranTheLeast
+    
+    if stopTimeSet:
+        timeLeft = (stopTime - datetime.datetime.now()).total_seconds()
+        
+        if timeLeft < 0:
+            if not muteOutput:
+                print("Stopping code Execution (Set Stop Time is reached)")
+            break;
+       #TODO: The following heuristics is lazy. In theory, scheduling could be adapted to reach stop more or less exactly at the specified time. How every, for the problem to be solved exactly, one needs to solve the binpacking problem. We can create some heuristics for scheduling here... 
+       #I am also not 100% sure this works. Have not tested it.
+        if memory[toRun]["#ExperimentsRun"]>2:
+            if timeLeft-memory[toRun]["AverageWallTime"] < memory[toRun]["WallTimeStdev"]:
+
+                deltaTimeLeft = abs(timeLeft-memory[toRun]["AverageWallTime"])                
+                adaptedScheduling = False
+
+                for key in memory:
+                    delta = abs(timeLeft-memory[key]["AverageWallTime"])                        
+                    if delta < deltaTimeLeft:
+                        deltaTimeLeft = delta
+                        toRun = key
+                        adaptedScheduling = True
+
+                    if adaptedScheduling and not muteOutput:
+                        print("Adapted Scheduling to meet Stop Time.")
+
+        
+
 
     #Creating Call command for the Experiment
 
@@ -188,7 +253,11 @@ while not allDone:
 
     #updating the memory
     memory[toRun]["CumWallTime"] += wallTime
+    memory[toRun]["WallTimes"].append(wallTime)
     memory[toRun]["#ExperimentsRun"] += 1
+    if memory[toRun]["#ExperimentsRun"] >= 2:
+        memory[toRun]["AvgWallTime"] = numpy.average(memory[toRun]["WallTimes"])
+        memory[toRun]["WallTimeStdev"] = numpy.std(memory[toRun]["WallTimes"])
 
     with open(memFile,'w') as file:
         json.dump(memory,file)
