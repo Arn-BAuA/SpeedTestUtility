@@ -100,7 +100,48 @@ if not args["runUntil"] == None:
             stopTime = datetime.datetime.combine(currentDate,t)
 
 if not args["TimeTable"] == None:
-    print("Time table not supported at the moment.")
+    with open(args["TimeTable"],'r') as file:
+        JsonTimeTable = json.load(file)
+    
+    conversionTable = {
+                "monday":0,
+                "tuesday":1,
+                "wednesday":2,
+                "thursday":3,
+                "friday":4,
+                "saturday":5,
+                "sunday":6,
+                }
+    
+    timeTable = {};
+    for key in JsonTimeTable:
+        timeTable[conversionTable[key]] = JsonTimeTable[key]
+
+    currentDateTime = datetime.datetime.now()
+    currentWeekday = currentDateTime.date().isoweekday()-1
+    
+    deltaDays = 0
+    nextStoptimeFound = False
+
+    while not nextStoptimeFound:
+        dayToCheck = (currentWeekday+deltaDays)%7
+        
+        if dayToCheck in timeTable:
+            t = datetime.time.fromisoformat(timeTable[dayToCheck])
+            if deltaDays == 0:
+                if t<currentDateTime.time():
+                    deltaDays += 1
+                    continue; #this means it is the right day, but the stopping date has already passed.
+
+            delta = datetime.timedelta(days = deltaDays)
+
+            stopTime = datetime.datetime.combine(currentDateTime.date()+delta,t)
+            stopTimeSet = True
+            nextStoptimeFound = True
+            break;
+
+        deltaDays += 1
+
 
 if stopTimeSet:
     print("Stop Time is set to "+str(stopTime))
@@ -137,6 +178,8 @@ def getAllParameterVariations(possibleParameters):
 
     return parameterIndices
 
+def getCurrentTime():
+    return "["+str(datetime.datetime.now())+"] "
 
 memory = {}
 
@@ -180,7 +223,7 @@ while not allDone:
     
     if allDone:
         if not muteOutput:
-            print("All Done Here.")
+            print(getCurrentTime()+": All Done Here.")
         break
 
     #Determine next experiment to be ran:
@@ -202,7 +245,7 @@ while not allDone:
         
         if timeLeft < 0:
             if not muteOutput:
-                print("Stopping code Execution (Set Stop Time is reached)")
+                print(getCurrentTime()+": Stopping code Execution (Set Stop Time is reached)")
             break;
        #TODO: The following heuristics is lazy. In theory, scheduling could be adapted to reach stop more or less exactly at the specified time. How every, for the problem to be solved exactly, one needs to solve the binpacking problem. We can create some heuristics for scheduling here... 
        #I am also not 100% sure this works. Have not tested it.
@@ -220,7 +263,7 @@ while not allDone:
                         adaptedScheduling = True
 
                     if adaptedScheduling and not muteOutput:
-                        print("Adapted Scheduling to meet Stop Time.")
+                        print(getCurrentTime()+": Adapted Scheduling to meet Stop Time.")
 
         
 
@@ -243,7 +286,7 @@ while not allDone:
     experimentStartTime = time.time()
     
     if not muteOutput:
-        print(runCommand)
+        print(getCurrentTime()+" : Running : "+runCommand)
 
     subprocess.call(runCommand,shell=True)
 

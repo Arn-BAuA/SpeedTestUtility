@@ -125,3 +125,36 @@ All Done Here.
 All the specified parametercombinations are executed. Notice how the code starts to adopt in the later executions. Experiments that take longer to run will be executed less often. This way, information is gathered first there where it is easyest to be obtained.
 
 ### Example Setup with Cron:
+
+In addition to the features shown in the previous example, it is possible to set a stoptime for the script. The script will stop automatically when the stoptime is met:
+
+<pre><code>
+python ExperimentScheduler.py -f testExperiment/testSeries.json -s testExperiment/seedList.txt -t 14:00
+</code></pre>
+
+The specifier -t lets you set a time or date and time when the code stops.
+When a specifier is set, the code outputs:
+
+<pre><code>
+Stop Time is set to 2025-01-06 12:00:00
+</code></pre>
+
+To indicate that the setting worked.
+
+It is also possible to provide a timetable via json:
+
+<pre><code>
+{
+	"monday":"06:30",
+	"tuesday":"06:30",
+	"wednesday":"06:30",
+	"thursday":"06:30",
+	"friday":"06:30"
+}
+</code></pre>
+
+This is a series of stopdates distributed over the week. If we combine this with a cronjob that starts the code every monday to friday at 18:00 o'Clock, the computer executes the experiments automatically at night.<br>
+Time Tables are specified with the -tt flag:
+<pre><code>
+python ExperimentScheduler.py -f testExperiment/testSeries.json -s testExperiment/seedList.txt -tt testExperiment/timetable.json
+</code></pre>
