@@ -136,7 +136,7 @@ The specifier -t lets you set a time or date and time when the code stops.
 When a specifier is set, the code outputs:
 
 <pre><code>
-Stop Time is set to 2025-01-06 12:00:00
+Stop Time is set to 2025-01-06 14:00:00
 </code></pre>
 
 To indicate that the setting worked.

@@ -250,13 +250,13 @@ while not allDone:
        #TODO: The following heuristics is lazy. In theory, scheduling could be adapted to reach stop more or less exactly at the specified time. How every, for the problem to be solved exactly, one needs to solve the binpacking problem. We can create some heuristics for scheduling here... 
        #I am also not 100% sure this works. Have not tested it.
         if memory[toRun]["#ExperimentsRun"]>2:
-            if timeLeft-memory[toRun]["AverageWallTime"] < memory[toRun]["WallTimeStdev"]:
+            if timeLeft-memory[toRun]["AvgWallTime"] < memory[toRun]["WallTimeStdev"]:
 
-                deltaTimeLeft = abs(timeLeft-memory[toRun]["AverageWallTime"])                
+                deltaTimeLeft = abs(timeLeft-memory[toRun]["AvgWallTime"])                
                 adaptedScheduling = False
 
                 for key in memory:
-                    delta = abs(timeLeft-memory[key]["AverageWallTime"])                        
+                    delta = abs(timeLeft-memory[key]["AvgWallTime"])                        
                     if delta < deltaTimeLeft:
                         deltaTimeLeft = delta
                         toRun = key
