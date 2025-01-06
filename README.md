@@ -88,9 +88,12 @@ This file is now accompanied by a .json file (testSeries.json):
 		[1,1.5,2.5],
 		[1,2]
 	],
-	"ErrorLog":"testExperiments/Errors.log"
+	"StdLogFolder":"testExperiment/log/Exp2/Output/",
+	"ErrLogFolder":"testExperiment/log/Exp2/Errors/"
 }
 </code></pre>
+
+StdLogFolder and ErrLogFolder indicate where the outputs of the experiment processes should be stored. If the folders don't exist they will be created if needet.
 
 THis file specifies which parameter should be varried. If we now call:
 
@@ -158,3 +161,65 @@ Time Tables are specified with the -tt flag:
 <pre><code>
 python ExperimentScheduler.py -f testExperiment/testSeries.json -s testExperiment/seedList.txt -tt testExperiment/timetable.json
 </code></pre>
+
+### Scheduling Multiple Experiments:
+It is also possible to have a experiments list file that contians the paths of multiple Experiment Json Files:
+
+<pre><code>
+testExperiment/testSeries1.json
+testExperiment/testSeries2.json
+</pre></code>
+
+This can be passed with 
+
+<pre><code>
+python ExperimentScheduler.py -fl testExperiment/testExperimentList.txt -s testExperiment/seedList.txt
+</code></pre>
+
+The different Experiments are scheduled one after the other. Code from the first experiment will only be executed if every run from the first experiment is already done.
+
+### Designing Experiemts with variable number of runs.
+
+Sometimes one can not know how often something should be ran. E.g. in runtime estimation, it is a quiet common experiment design to give an algorithm a specific time budget and see how large the input is that can be processed in that time.
+In such a situation it may occure that one has to try several sizes of input, until the right one is found. The experiment code has roudimentary structures to handle this. <br>
+Look at the following json:
+
+<pre><code>
+{
+	"Command":"python testExperiment/experiment.py",
+	"RequiresSeed":true,
+	"SeedArgumentPosition":2,
+	"Variations":[
+		[1,1.5],
+		[1,2]
+	],
+	"StdLogFolder":"testExperiment/log/Exp2/Output/",
+	"ErrLogFolder":"testExperiment/log/Exp2/Errors/",
+	"SuccsessCriterion":"python testExperiment/experiment.py --Verify"
+}
+</code></pre>
+
+The line "SuccsessCirterion" defines a method call. In our case it is a modified version of the already known experiment.py:
+
+<pre><code>
+
+#Demo code for the test of the scheduler.
+
+import sys
+import time
+import os
+
+if sys.argv[1] == "--Verify":
+    import random
+
+    if(random.random()>0.5):
+        print(1,end="")
+    else:
+        print(0,end="")
+    sys.exit()
+
+[....] and so on and so forth.
+</code></pre>
+
+SuccsessCriterion should contain the call of a method that, upon recieving the paramteres of the experiment call, can recive if the experiment met the succsess cirterion or if it must be redone. The experiment code must do the alternations for the new attempt by it self. The criterion must return either 0 or 1 on std output to indicate the succsess.
+

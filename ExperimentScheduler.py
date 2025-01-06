@@ -158,13 +158,40 @@ if "SeedList" in args:
 #   Main Scheduling Method (It is that way due to historical groth of this file. It is not pretty)
 #
 
-def scheduleExperiments(seriesSpecificationFile,seeds,stopTimeSet,stopTime,muteOutput): 
+def getCurrentTime():
+    return "["+str(datetime.datetime.now())+"] "
+
+def log(folder,file,message,header):
+    os.makedirs(folder,exist_ok=True)
+    with open(folder+file,'a') as file:
+        
+        header =  getCurrentTime()+" "+header+"\n"
+        file.write(header)
+        file.write(str(message)+"\n")
+
+def scheduleExperiments(seriesSpecificationFile,
+                        seeds,
+                        stopTimeSet,
+                        stopTime,
+                        muteOutput,
+                        ): 
     # Json File specifying the command to run to start an experiment and the arguments involved
     memFile = seriesSpecificationFile+".mem"
 
     with open(seriesSpecificationFile,'r') as file:
         seriesSpecification = json.load(file)
+    
+    expStdOutput = "experimentSchedulerLog/experimentOutput/"
+    expErrOutput = "experimentSchedulerLog/experimentError/"
 
+    if "StdLogFolder" in seriesSpecification: 
+        expStdOutput = seriesSpecification["StdLogFolder"]
+        if expStdOutput[-1] == "/":
+            expStdOutput += "/"
+    if "ErrLogFolder" in seriesSpecification: 
+        expErrOutput = seriesSpecification["ErrLogFolder"]
+        if expErrOutput[-1] == "/":
+            expErrOutput += "/"
 
 
     #Keys used to remember Run.
@@ -199,8 +226,6 @@ def scheduleExperiments(seriesSpecificationFile,seeds,stopTimeSet,stopTime,muteO
 
         return parameterIndices
 
-    def getCurrentTime():
-        return "["+str(datetime.datetime.now())+"] "
 
     memory = {}
 
@@ -297,6 +322,10 @@ def scheduleExperiments(seriesSpecificationFile,seeds,stopTimeSet,stopTime,muteO
         commandArgs = []
         for i,index in enumerate(memory[toRun]["ParameterIndices"]):
             commandArgs.append(str(seriesSpecification["Variations"][i][index]))
+        
+        
+        runCommandNoSeed = copy.copy(runCommand)
+        commandArgsNoSeed = copy.copy(commandArgs)#for the file name for logging
 
         if "RequiresSeed" in seriesSpecification and seriesSpecification["RequiresSeed"] == True:
             seed = seeds[memory[toRun]["#ExperimentsRun"]]
@@ -304,23 +333,64 @@ def scheduleExperiments(seriesSpecificationFile,seeds,stopTimeSet,stopTime,muteO
 
         for arg in commandArgs:
             runCommand += " "+arg
-
+        
+        for arg in commandArgsNoSeed:
+            runCommandNoSeed += "_"+arg
         #running the experiment
         experimentStartTime = time.time()
         
         if not muteOutput:
             print(getCurrentTime()+" : Running : "+runCommand)
 
-        subprocess.call(runCommand,shell=True)
+        result = subprocess.run([runCommand],
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE,
+                                 shell=True,
+                                 text=True)
 
         experimentEndTime = time.time()
+
+        logFileName = runCommandNoSeed
+        logFileName = logFileName.replace(" ","_")
+        logFileName = logFileName.replace("/",".")
+        logFileName+=".log"
+        
+        if not result.stdout == "":    
+            log(expStdOutput,logFileName,result.stdout,"On running "+runCommand+":")
+        if not result.stderr == "":    
+            log(expErrOutput,logFileName,result.stderr,"On running "+runCommand+":")
 
         wallTime = experimentEndTime-experimentStartTime
 
         #updating the memory
         memory[toRun]["CumWallTime"] += wallTime
         memory[toRun]["WallTimes"].append(wallTime)
-        memory[toRun]["#ExperimentsRun"] += 1
+        
+        #Check if there is a criterion for succsess
+        if "SuccsessCriterion" in seriesSpecification:
+            theCommandArgs = "" 
+            for args in commandArgs:
+                theCommandArgs += " "+args
+
+            result = subprocess.run([seriesSpecification["SuccsessCriterion"]+theCommandArgs],
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE,
+                                    shell=True,
+                                    text=True)
+            
+            succsessful = bool(int(result.stdout))
+
+            if succsessful:
+                memory[toRun]["#ExperimentsRun"] += 1
+                if not muteOutput:
+                    print("Met Succsess Criterion at "+runCommand)
+            else:
+                if not muteOutput:
+                    print("Havn't met Succsess Cirterion at "+runCommand)
+        else:
+            memory[toRun]["#ExperimentsRun"] += 1
+
+
         if memory[toRun]["#ExperimentsRun"] >= 2:
             memory[toRun]["AvgWallTime"] = numpy.average(memory[toRun]["WallTimes"])
             memory[toRun]["WallTimeStdev"] = numpy.std(memory[toRun]["WallTimes"])

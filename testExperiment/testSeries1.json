@@ -1,0 +1,11 @@
+{
+	"Command":"python testExperiment/experiment.py",
+	"RequiresSeed":true,
+	"SeedArgumentPosition":2,
+	"Variations":[
+		[1,1.5,2.5,10],
+		[1,2,3]
+	],
+	"StdLogFolder":"testExperiment/log/Exp1/Output/",
+	"ErrLogFolder":"testExperiment/log/Exp1/Errors/"
+}
