@@ -210,18 +210,20 @@ def scheduleExperiments(seriesSpecificationFile,
             nVariations *= len(pSet)
 
         changeRate = 1
+        firstRun = True
+
 
         for pSet in possibleParameters:
             n = len(pSet)
             
-            if changeRate == 1:
+            if firstRun:
                 for i in range(0,nVariations):
                     parameterIndices.append([i%n])
             else:
                 for i in range(0,int(nVariations/changeRate)):
                     for j in range(0,changeRate):
                         parameterIndices[i*changeRate+j].append(int(i%n))
-            
+            firstRun = False
             changeRate *= n
 
         return parameterIndices
