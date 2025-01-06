@@ -16,8 +16,12 @@ parser.add_argument("-f",
                     "--SpecificationFile",
                     dest="SeriesSpecFile",
                     help="Json File specifying how one measurement series should look like.",
-                    type=str,
-                    required=True)
+                    type=str)
+parser.add_argument("-fl",
+                    "--FileList",
+                    dest="FileList",
+                    help="File containing a list of specification files that should be processed one after the other.",
+                    type=str)
 parser.add_argument("-s",
                     "--SeedList",
                     "--Seeds",
@@ -48,28 +52,21 @@ parser.add_argument("-i",
                     default="wait",
                     type=str)
 
+###################################
+#   Processing Argunments
+#
+
 args = vars(parser.parse_args())
 
-# Json File specifying the command to run to start an experiment and the arguments involved
-seriesSpecificationFile = args["SeriesSpecFile"]
-memFile = seriesSpecificationFile+".mem"
+if not args["SeriesSpecFile"] == None:
+    seriesSpecificationFiles = [args["SeriesSpecFile"]]
+else:
+    seriesSpecificationFiles = []
 
-with open(seriesSpecificationFile,'r') as file:
-    seriesSpecification = json.load(file)
-
-
-# List of seeds for random Seeding of the Experiment.
-if seriesSpecification["RequiresSeed"]:
-    if not "SeedList" in args:
-        raise Exception("A seedlist is required to run "+args["SeriesSpecFile"]+".")
-
-    seedList = args["SeedList"]
-
-    seeds = []
-
-    with open(seedList,'r') as file:
+    with open(args["FileList"],"r") as file:
         for line in file:
-            seeds.append(int(line))
+            seriesSpecificationFiles.append(line[:-1]) #[:-1] to remove the \n at the end.
+            
 
 muteOutput = args["mute"]
 
@@ -145,162 +142,203 @@ if not args["TimeTable"] == None:
 
 if stopTimeSet:
     print("Stop Time is set to "+str(stopTime))
+ 
+# List of seeds for random Seeding of the Experiment.
+if "SeedList" in args:
 
-#Keys used to remember Run.
-def createExperimentKey(parameterIndices):
-    key = ""
-    for i,index in enumerate(parameterIndices):
-        key += "p"+str(i)+":"+str(index)+";"
-    return key
+    seedList = args["SeedList"]
 
-def getAllParameterVariations(possibleParameters):
-    parameterIndices = []
-    
-    nVariations = 1
+    seeds = []
 
-    for pSet in possibleParameters:
-        nVariations *= len(pSet)
+    with open(seedList,'r') as file:
+        for line in file:
+            seeds.append(int(line))
 
-    changeRate = 1
+###################################
+#   Main Scheduling Method (It is that way due to historical groth of this file. It is not pretty)
+#
 
-    for pSet in possibleParameters:
-        n = len(pSet)
+def scheduleExperiments(seriesSpecificationFile,seeds,stopTimeSet,stopTime,muteOutput): 
+    # Json File specifying the command to run to start an experiment and the arguments involved
+    memFile = seriesSpecificationFile+".mem"
+
+    with open(seriesSpecificationFile,'r') as file:
+        seriesSpecification = json.load(file)
+
+
+
+    #Keys used to remember Run.
+    def createExperimentKey(parameterIndices):
+        key = ""
+        for i,index in enumerate(parameterIndices):
+            key += "p"+str(i)+":"+str(index)+";"
+        return key
+
+    def getAllParameterVariations(possibleParameters):
+        parameterIndices = []
         
-        if changeRate == 1:
-            for i in range(0,nVariations):
-                parameterIndices.append([i%n])
-        else:
-            for i in range(0,int(nVariations/changeRate)):
-                for j in range(0,changeRate):
-                    parameterIndices[i*changeRate+j].append(int(i%n))
-        
-        changeRate *= n
+        nVariations = 1
 
-    return parameterIndices
+        for pSet in possibleParameters:
+            nVariations *= len(pSet)
 
-def getCurrentTime():
-    return "["+str(datetime.datetime.now())+"] "
+        changeRate = 1
 
-memory = {}
+        for pSet in possibleParameters:
+            n = len(pSet)
+            
+            if changeRate == 1:
+                for i in range(0,nVariations):
+                    parameterIndices.append([i%n])
+            else:
+                for i in range(0,int(nVariations/changeRate)):
+                    for j in range(0,changeRate):
+                        parameterIndices[i*changeRate+j].append(int(i%n))
+            
+            changeRate *= n
 
-#Load List of experiments
-if os.path.exists(memFile):
-    with open(memFile,'r') as file:
-        memory = json.load(file)
+        return parameterIndices
 
-#Update List (In Case additional Parameters are added to the series File ...)
-variations = getAllParameterVariations(seriesSpecification["Variations"])
-updateOccured = False
+    def getCurrentTime():
+        return "["+str(datetime.datetime.now())+"] "
 
+    memory = {}
 
-for v in variations:
-    key = createExperimentKey(v)
-    if not key in memory:
-        memory[key] = {
-                    "ParameterIndices":v,
-                    "CumWallTime":0,
-                    "WallTimes":[],
-                    "AvgWallTime":0,
-                    "WallTimeStdev":0,
-                    "#ExperimentsRun":0,
-                }
-        updateOccured = True
+    #Load List of experiments
+    if os.path.exists(memFile):
+        with open(memFile,'r') as file:
+            memory = json.load(file)
 
-if updateOccured:
-    with open(memFile,'w') as file:
-        json.dump(memory,file)
+    #Update List (In Case additional Parameters are added to the series File ...)
+    variations = getAllParameterVariations(seriesSpecification["Variations"])
+    updateOccured = False
 
 
-allDone = False
+    for v in variations:
+        key = createExperimentKey(v)
+        if not key in memory:
+            memory[key] = {
+                        "ParameterIndices":v,
+                        "CumWallTime":0,
+                        "WallTimes":[],
+                        "AvgWallTime":0,
+                        "WallTimeStdev":0,
+                        "#ExperimentsRun":0,
+                    }
+            updateOccured = True
 
-while not allDone:
-    #Check if we are done
-    for key in memory:
-        allDone = True;
-        if not memory[key]["#ExperimentsRun"] == len(seeds):
-            allDone = False
-            break
-    
-    if allDone:
-        if not muteOutput:
-            print(getCurrentTime()+": All Done Here.")
-        break
+    if updateOccured:
+        with open(memFile,'w') as file:
+            json.dump(memory,file)
 
-    #Determine next experiment to be ran:
-    
-    ranTheLeast = ""
-    cumTime = float("inf")
 
-    for key in memory:
-        if memory[key]["CumWallTime"] < cumTime:
+    allDone = False
+
+    while not allDone:
+        #Check if we are done
+        for key in memory:
+            allDone = True;
             if not memory[key]["#ExperimentsRun"] == len(seeds):
-                ranTheLeast = key
-                cumTime = memory[key]["CumWallTime"]
+                allDone = False
+                break
+        
+        if allDone:
+            if not muteOutput:
+                print(getCurrentTime()+": All Done Here.")
+            break
+
+        #Determine next experiment to be ran:
+        
+        ranTheLeast = ""
+        cumTime = float("inf")
+
+        for key in memory:
+            if memory[key]["CumWallTime"] < cumTime:
+                if not memory[key]["#ExperimentsRun"] == len(seeds):
+                    ranTheLeast = key
+                    cumTime = memory[key]["CumWallTime"]
 
 
-    toRun = ranTheLeast
-    
+        toRun = ranTheLeast
+        
+        if stopTimeSet:
+            timeLeft = (stopTime - datetime.datetime.now()).total_seconds()
+            
+            if timeLeft < 0:
+                if not muteOutput:
+                    print(getCurrentTime()+": Stopping code Execution (Set Stop Time is reached)")
+                break;
+           #TODO: The following heuristics is lazy. In theory, scheduling could be adapted to reach stop more or less exactly at the specified time. How every, for the problem to be solved exactly, one needs to solve the binpacking problem. We can create some heuristics for scheduling here... 
+           #I am also not 100% sure this works. Have not tested it.
+            if memory[toRun]["#ExperimentsRun"]>2: # Mandatory to have stdev and average runtime for heuristics
+                if timeLeft-memory[toRun]["AvgWallTime"] < memory[toRun]["WallTimeStdev"]:
+
+                    deltaTimeLeft = abs(timeLeft-memory[toRun]["AvgWallTime"])                
+                    adaptedScheduling = False
+
+                    for key in memory:
+                        if memory[key]["#ExperimentsRun"]<=2:
+                            break
+                        delta = abs(timeLeft-memory[key]["AvgWallTime"])                        
+                        if delta < deltaTimeLeft:
+                            deltaTimeLeft = delta
+                            toRun = key
+                            adaptedScheduling = True
+
+                        if adaptedScheduling and not muteOutput:
+                            print(getCurrentTime()+": Adapted Scheduling to meet Stop Time.")
+
+            
+
+
+        #Creating Call command for the Experiment
+
+        runCommand = seriesSpecification["Command"]
+        commandArgs = []
+        for i,index in enumerate(memory[toRun]["ParameterIndices"]):
+            commandArgs.append(str(seriesSpecification["Variations"][i][index]))
+
+        if "RequiresSeed" in seriesSpecification and seriesSpecification["RequiresSeed"] == True:
+            seed = seeds[memory[toRun]["#ExperimentsRun"]]
+            commandArgs.insert(seriesSpecification["SeedArgumentPosition"]-1,str(seed))
+
+        for arg in commandArgs:
+            runCommand += " "+arg
+
+        #running the experiment
+        experimentStartTime = time.time()
+        
+        if not muteOutput:
+            print(getCurrentTime()+" : Running : "+runCommand)
+
+        subprocess.call(runCommand,shell=True)
+
+        experimentEndTime = time.time()
+
+        wallTime = experimentEndTime-experimentStartTime
+
+        #updating the memory
+        memory[toRun]["CumWallTime"] += wallTime
+        memory[toRun]["WallTimes"].append(wallTime)
+        memory[toRun]["#ExperimentsRun"] += 1
+        if memory[toRun]["#ExperimentsRun"] >= 2:
+            memory[toRun]["AvgWallTime"] = numpy.average(memory[toRun]["WallTimes"])
+            memory[toRun]["WallTimeStdev"] = numpy.std(memory[toRun]["WallTimes"])
+
+        with open(memFile,'w') as file:
+            json.dump(memory,file)
+
+##########################################
+#   The Execution of everything:
+#
+for f in seriesSpecificationFiles:
     if stopTimeSet:
         timeLeft = (stopTime - datetime.datetime.now()).total_seconds()
-        
-        if timeLeft < 0:
-            if not muteOutput:
-                print(getCurrentTime()+": Stopping code Execution (Set Stop Time is reached)")
-            break;
-       #TODO: The following heuristics is lazy. In theory, scheduling could be adapted to reach stop more or less exactly at the specified time. How every, for the problem to be solved exactly, one needs to solve the binpacking problem. We can create some heuristics for scheduling here... 
-       #I am also not 100% sure this works. Have not tested it.
-        if memory[toRun]["#ExperimentsRun"]>2:
-            if timeLeft-memory[toRun]["AvgWallTime"] < memory[toRun]["WallTimeStdev"]:
+    else:
+        timeLeft = 1
 
-                deltaTimeLeft = abs(timeLeft-memory[toRun]["AvgWallTime"])                
-                adaptedScheduling = False
-
-                for key in memory:
-                    delta = abs(timeLeft-memory[key]["AvgWallTime"])                        
-                    if delta < deltaTimeLeft:
-                        deltaTimeLeft = delta
-                        toRun = key
-                        adaptedScheduling = True
-
-                    if adaptedScheduling and not muteOutput:
-                        print(getCurrentTime()+": Adapted Scheduling to meet Stop Time.")
-
-        
-
-
-    #Creating Call command for the Experiment
-
-    runCommand = seriesSpecification["Command"]
-    commandArgs = []
-    for i,index in enumerate(memory[toRun]["ParameterIndices"]):
-        commandArgs.append(str(seriesSpecification["Variations"][i][index]))
-
-    if "RequiresSeed" in seriesSpecification and seriesSpecification["RequiresSeed"] == True:
-        seed = seeds[memory[toRun]["#ExperimentsRun"]]
-        commandArgs.insert(seriesSpecification["SeedArgumentPosition"]-1,str(seed))
-
-    for arg in commandArgs:
-        runCommand += " "+arg
-
-    #running the experiment
-    experimentStartTime = time.time()
-    
-    if not muteOutput:
-        print(getCurrentTime()+" : Running : "+runCommand)
-
-    subprocess.call(runCommand,shell=True)
-
-    experimentEndTime = time.time()
-
-    wallTime = experimentEndTime-experimentStartTime
-
-    #updating the memory
-    memory[toRun]["CumWallTime"] += wallTime
-    memory[toRun]["WallTimes"].append(wallTime)
-    memory[toRun]["#ExperimentsRun"] += 1
-    if memory[toRun]["#ExperimentsRun"] >= 2:
-        memory[toRun]["AvgWallTime"] = numpy.average(memory[toRun]["WallTimes"])
-        memory[toRun]["WallTimeStdev"] = numpy.std(memory[toRun]["WallTimes"])
-
-    with open(memFile,'w') as file:
-        json.dump(memory,file)
+    if timeLeft > 0:
+        print("Start Running "+f)
+        scheduleExperiments(f,seeds,stopTimeSet,stopTime,muteOutput)
+    else:
+        break
